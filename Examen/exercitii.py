@@ -65,6 +65,7 @@ def plot_posterior_mean_band(x_grid, mu_samples, title, xlabel, ylabel):
     hdi = az.hdi(mu_samples, hdi_prob=0.94)
     plt.figure()
     plt.plot(x_grid, mu_mean, label='Mean Prediction')
+    # Vizualizare banda de incertitudine
     plt.fill_between(x_grid, hdi[:, 0], hdi[:, 1], alpha=0.3, label='HDI 94%')
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -76,9 +77,7 @@ def main():
     # 1. Incarcarea datelor si explorare vizuala
     csv_path = BASE_DIR / "bike_daily.csv"
     if not csv_path.exists():
-        print(f"ATENTIE: Nu am gasit {csv_path}. Asigura-te ca fisierul e in folder.")
-        # Generam date sintetice daca fisierul lipseste pentru a putea rula codul
-        print("Generare date sintetice pentru demonstratie")
+        print(f"ATENTIE: Nu am gasit {csv_path}. Generez date sintetice")
         n = 365
         df = pd.DataFrame({
             'rentals': np.random.poisson(5000, n),
@@ -92,17 +91,17 @@ def main():
         df = pd.read_csv(csv_path)
 
     needed = ["rentals", "temp_c", "humidity", "wind_kph", "is_holiday", "season"]
-    # Verificam daca coloanele exista
     available = [c for c in needed if c in df.columns]
     df = df[available].dropna().copy()
     
     print("Date incarcate. Dimensiune:", df.shape)
-    print(df.head())
 
-    # Generam grafice
     plot_scatter(df["temp_c"], df["rentals"], "temp_c", "rentals", "Rentals vs temp_c")
     plot_scatter(df["humidity"], df["rentals"], "humidity", "rentals", "Rentals vs humidity")
     plot_scatter(df["wind_kph"], df["rentals"], "wind_kph", "rentals", "Rentals vs wind_kph")
+    
+    # Din graficul cu temperatura se observa o forma de U intors, deci relatia e neliniara.
+    # Numarul de inchirieri scade cand e prea cald sau prea frig.
 
     # 2. Standardizare si pregatirea datelor
     y = df["rentals"].to_numpy(float)
@@ -123,7 +122,7 @@ def main():
     X_lin = np.column_stack([temp_z, hum_z, wind_z, is_holiday, season_dummies.to_numpy(float)])
     colnames_lin = ["temp_c_z", "humidity_z", "wind_kph_z", "is_holiday"] + season_cols
 
-    # Matrice pentru modelul polinomial
+    # Matrice pentru modelul polinomial (adaugam temp^2 centrat)
     temp2 = temp_z ** 2
     temp2 = temp2 - temp2.mean()
     X_poly = np.column_stack([temp_z, temp2, hum_z, wind_z, is_holiday, season_dummies.to_numpy(float)])
@@ -141,7 +140,6 @@ def main():
 
         id_lin = pm.sample(draws=1500, tune=1500, chains=2, target_accept=0.9,
                            random_seed=RANDOM_SEED, progressbar=True)
-        #Calculam log likelihood explicit pentru WAIC
         pm.compute_log_likelihood(id_lin)
 
     # Model Polinomial
@@ -156,10 +154,9 @@ def main():
 
         id_poly = pm.sample(draws=1500, tune=1500, chains=2, target_accept=0.9,
                             random_seed=RANDOM_SEED, progressbar=True)
-        #Calculam log likelihood explicit pentru WAIC
         pm.compute_log_likelihood(id_poly)
 
-    # 3. Inferenta si diagnostic
+    # 3. Inferenta si Diagnostic
     print("Sumar Model Liniar (95% HDI):")
     print(az.summary(id_lin, var_names=["alpha", "betas", "sigma"], hdi_prob=0.95))
 
@@ -171,16 +168,19 @@ def main():
 
     print(f"Cea mai influenta variabila (liniar): {top_lin}")
     print(f"Cea mai influenta variabila (polinomial): {top_poly}")
+    # Variabila cea mai influenta este cea cu coeficientul cel mai mare in valoare absoluta.
 
-    # 4. Comparare modele (WAIC) si PPC
-    # Acum id_lin si id_poly contin grupul log_likelihood
+    # 4. Comparare Modele & PPC
     waic_lin = az.waic(id_lin)
     waic_poly = az.waic(id_poly)
 
     print("WAIC liniar:", waic_lin.elpd_waic)
     print("WAIC polinomial:", waic_poly.elpd_waic)
+    
+    # Alegem modelul cu WAIC mai mic (elpd mai mare). Modelul polinomial este mai bun
+    # deoarece surprinde scaderea cererii la temperaturi extreme.
 
-    # Vizualizare PPC pentru modelul polinomial
+    # PPC - Vizualizare predictie
     temp_grid = np.linspace(temp.min(), temp.max(), 120)
     temp_grid_z = (temp_grid - temp_mu) / (temp_sd if temp_sd != 0 else 1.0)
     temp_grid_z2 = temp_grid_z ** 2
@@ -213,7 +213,7 @@ def main():
                              "PPC: Predictie Rentals vs Temperatura (Polinomial)",
                              "Temperatura (C)", "Rentals Estimati")
 
-    # 5. Constructie target binar (High Demand)
+    # 5. Constructie Target Binar
     Q = float(np.percentile(y, 75))
     is_high = (y >= Q).astype(int)
     print("Pragul Q (75%):", Q)
@@ -221,6 +221,10 @@ def main():
 
     # 6. Regresie Logistica
     print("Rulare Regresie Logistica")
+    
+    # Pastram termenul patratic temp^2 deoarece probabilitatea de cerere mare scade
+    # atat la temperaturi foarte mici cat si foarte mari, deci nu e o functie monotona.
+    
     with pm.Model() as m_log:
         alpha = pm.Normal("alpha", mu=0.0, sigma=2.5)
         betas = pm.Normal("betas", mu=0.0, sigma=2.5, shape=X_poly.shape[1])
@@ -232,10 +236,9 @@ def main():
 
         id_log = pm.sample(draws=2000, tune=2000, chains=2, target_accept=0.9,
                            random_seed=RANDOM_SEED, progressbar=True)
-        # calculam si aici daca vom folosi WAIC pe viitor
         pm.compute_log_likelihood(id_log)
 
-    # 7. Analiza deciziei
+    # 7. Analiza Deciziei
     summary_log = az.summary(id_log, var_names=["alpha", "betas"], hdi_prob=0.95)
     print(summary_log)
 
