@@ -78,7 +78,7 @@ def main():
     if not csv_path.exists():
         print(f"ATENTIE: Nu am gasit {csv_path}. Asigura-te ca fisierul e in folder.")
         # Generam date sintetice daca fisierul lipseste pentru a putea rula codul
-        print("Generare date sintetice pentru demonstratie...")
+        print("Generare date sintetice pentru demonstratie")
         n = 365
         df = pd.DataFrame({
             'rentals': np.random.poisson(5000, n),
@@ -130,7 +130,7 @@ def main():
     colnames_poly = ["temp_c_z", "temp_c_z2_centered", "humidity_z", "wind_kph_z", "is_holiday"] + season_cols
 
     # Model Liniar
-    print("Rulare Model Liniar...")
+    print("Rulare Model Liniar")
     with pm.Model() as m_lin:
         alpha = pm.Normal("alpha", mu=0.0, sigma=1.0)
         betas = pm.Normal("betas", mu=0.0, sigma=1.0, shape=X_lin.shape[1])
@@ -220,7 +220,7 @@ def main():
     print("Proportie High Demand:", is_high.mean())
 
     # 6. Regresie Logistica
-    print("Rulare Regresie Logistica...")
+    print("Rulare Regresie Logistica")
     with pm.Model() as m_log:
         alpha = pm.Normal("alpha", mu=0.0, sigma=2.5)
         betas = pm.Normal("betas", mu=0.0, sigma=2.5, shape=X_poly.shape[1])
