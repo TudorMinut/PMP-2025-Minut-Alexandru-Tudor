@@ -141,11 +141,11 @@ def main():
 
         id_lin = pm.sample(draws=1500, tune=1500, chains=2, target_accept=0.9,
                            random_seed=RANDOM_SEED, progressbar=True)
-        # FIX: Calculam log likelihood explicit pentru WAIC
+        #Calculam log likelihood explicit pentru WAIC
         pm.compute_log_likelihood(id_lin)
 
     # Model Polinomial
-    print("Rulare Model Polinomial...")
+    print("Rulare Model Polinomial")
     with pm.Model() as m_poly:
         alpha = pm.Normal("alpha", mu=0.0, sigma=1.0)
         betas = pm.Normal("betas", mu=0.0, sigma=1.0, shape=X_poly.shape[1])
@@ -156,7 +156,7 @@ def main():
 
         id_poly = pm.sample(draws=1500, tune=1500, chains=2, target_accept=0.9,
                             random_seed=RANDOM_SEED, progressbar=True)
-        # FIX: Calculam log likelihood explicit pentru WAIC
+        #Calculam log likelihood explicit pentru WAIC
         pm.compute_log_likelihood(id_poly)
 
     # 3. Inferenta si diagnostic
@@ -232,7 +232,7 @@ def main():
 
         id_log = pm.sample(draws=2000, tune=2000, chains=2, target_accept=0.9,
                            random_seed=RANDOM_SEED, progressbar=True)
-        # Optional: calculam si aici daca vom folosi WAIC pe viitor
+        # calculam si aici daca vom folosi WAIC pe viitor
         pm.compute_log_likelihood(id_log)
 
     # 7. Analiza deciziei
